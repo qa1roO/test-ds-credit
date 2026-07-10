@@ -17,8 +17,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 DEFAULT_PROVIDER = "auto"
 LLM_REQUEST_INTERVAL_SECONDS = 10.0
+LLM_REQUEST_BATCH_SIZE = 4
 _PROVIDER_DISABLED = False
 _LAST_REQUEST_STARTED_AT: float | None = None
+_REQUESTS_STARTED = 0
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -52,17 +54,27 @@ def parse_json_response(response: str | None) -> dict[str, Any] | None:
 
 
 def _wait_before_request() -> None:
-    """Выдержать минимальный интервал между реальными запросами к LLM."""
-    global _LAST_REQUEST_STARTED_AT
+    """Выдержать интервал после каждой пачки реальных запросов к LLM."""
+    global _LAST_REQUEST_STARTED_AT, _REQUESTS_STARTED
 
     now = time.monotonic()
-    if _LAST_REQUEST_STARTED_AT is not None:
+    batch_finished = (
+        _REQUESTS_STARTED > 0
+        and _REQUESTS_STARTED % LLM_REQUEST_BATCH_SIZE == 0
+    )
+    if batch_finished and _LAST_REQUEST_STARTED_AT is not None:
         elapsed = now - _LAST_REQUEST_STARTED_AT
         remaining = LLM_REQUEST_INTERVAL_SECONDS - elapsed
         if remaining > 0:
-            LOGGER.debug("Ожидание %.2f с перед запросом к LLM", remaining)
+            LOGGER.debug(
+                "Ожидание %.2f с после пачки из %d LLM-запросов",
+                remaining,
+                LLM_REQUEST_BATCH_SIZE,
+            )
             time.sleep(remaining)
-    _LAST_REQUEST_STARTED_AT = time.monotonic()
+            now = time.monotonic()
+    _LAST_REQUEST_STARTED_AT = now
+    _REQUESTS_STARTED += 1
 
 
 def ask_llm(prompt: str, *, max_tokens: int = 200) -> str | None:

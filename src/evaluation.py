@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if llm_available():
-        print("Используется: LLM (fallback при ошибке провайдера)\n")
+        print("Используется LLM\n")
     else:
         print("LLM недоступна или HF_TOKEN не задан используется обработка без LLM\n")
 

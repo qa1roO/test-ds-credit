@@ -13,6 +13,7 @@ def reset_client_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Сбрасывать процессное состояние клиента между unit-тестами."""
     monkeypatch.setattr(llm_client, "_PROVIDER_DISABLED", False)
     monkeypatch.setattr(llm_client, "_LAST_REQUEST_STARTED_AT", None)
+    monkeypatch.setattr(llm_client, "_REQUESTS_STARTED", 0)
 
 
 def _successful_response(content: str = "ok") -> SimpleNamespace:
@@ -72,11 +73,11 @@ def test_first_request_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     assert llm_client.ask_llm("first") == "ok"
 
 
-def test_second_request_waits_for_remaining_interval(
+def test_fifth_request_waits_after_batch_of_four(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
-    monotonic_values = iter((0.0, 0.0, 4.0, 10.0))
+    monotonic_values = iter((0.0, 1.0, 2.0, 3.0, 7.0, 13.0))
 
     class FakeClient:
         def __init__(self, **_kwargs: object) -> None:
@@ -88,11 +89,13 @@ def test_second_request_waits_for_remaining_interval(
     monkeypatch.setenv("HF_TOKEN", "hf_test_secret")
     monkeypatch.setattr(huggingface_hub, "InferenceClient", FakeClient)
     monkeypatch.setattr(llm_client, "LLM_REQUEST_INTERVAL_SECONDS", 10.0)
+    monkeypatch.setattr(llm_client, "LLM_REQUEST_BATCH_SIZE", 4)
     monkeypatch.setattr(llm_client.time, "monotonic", lambda: next(monotonic_values))
     monkeypatch.setattr(llm_client.time, "sleep", sleeps.append)
 
-    assert llm_client.ask_llm("first") == "ok"
-    assert llm_client.ask_llm("second") == "ok"
+    for request_number in range(1, 6):
+        assert llm_client.ask_llm(f"request {request_number}") == "ok"
+
     assert sleeps == [pytest.approx(6.0)]
 
 

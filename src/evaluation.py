@@ -11,6 +11,7 @@ from tabulate import tabulate
 
 from classification import classify
 from extraction import FIELDS, extract
+from llm_client import llm_available
 from subject_check import check_subject
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -350,6 +351,12 @@ def main(argv: list[str] | None = None) -> int:
         default="all",
     )
     args = parser.parse_args(argv)
+
+    if llm_available():
+        print("Используется: LLM (fallback при ошибке провайдера)\n")
+    else:
+        print("LLM недоступна или HF_TOKEN не задан используется обработка без LLM\n")
+
     reports = {
         "requirements": ("Обязательные примеры из ТЗ", requirements_report),
         "documents": ("Документы", document_report),

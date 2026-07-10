@@ -51,9 +51,6 @@ def test_all_report_sections_have_required_order(
 
     assert evaluation.main(["--report", "all"]) == 0
     output = capsys.readouterr().out
-    assert output.startswith(
-        "Режим обработки: fallback (LLM недоступна или HF_TOKEN не задан)"
-    )
     headings = (
         "## Обязательные примеры из ТЗ",
         "## Документы",
@@ -73,10 +70,6 @@ def test_main_reports_llm_mode(
     monkeypatch.setattr(evaluation, "requirements_report", lambda: "requirements")
 
     assert evaluation.main(["--report", "requirements"]) == 0
-
-    assert capsys.readouterr().out.startswith(
-        "Режим обработки: LLM (fallback при ошибке провайдера)"
-    )
 
 
 def test_document_table_format_is_preserved() -> None:

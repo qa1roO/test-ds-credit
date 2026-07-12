@@ -338,7 +338,7 @@ def subject_report() -> str:
     return (
         f"{table}\n\n"
         f"Корректно однозначных примеров: {strict_correct}/{strict_total}\n\n"
-        f"Пограничных примеров: {edge_total}. Они не включаются в расчёт точности."
+        f"Граничных примеров: {edge_total}. Они не включаются в расчёт точности."
     )
 
 
@@ -358,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
         print("LLM недоступна или HF_TOKEN не задан используется обработка без LLM\n")
 
     reports = {
-        "requirements": ("Обязательные примеры из ТЗ", requirements_report),
+        "requirements": ("Примеры из ТЗ", requirements_report),
         "documents": ("Документы", document_report),
         "classification": ("Классификация", classification_report),
         "subjects": ("Предметы оплаты", subject_report),

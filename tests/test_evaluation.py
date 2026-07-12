@@ -52,7 +52,7 @@ def test_all_report_sections_have_required_order(
     assert evaluation.main(["--report", "all"]) == 0
     output = capsys.readouterr().out
     headings = (
-        "## Обязательные примеры из ТЗ",
+        "## Примеры из ТЗ",
         "## Документы",
         "## Классификация",
         "## Предметы оплаты",
@@ -109,7 +109,7 @@ def test_subject_report_combines_edge_without_adding_it_to_accuracy(
     results = {
         "Семена": (True, 0.9, "Разрешено"),
         "Офис": (False, 0.9, "Не разрешено"),
-        "Доставка удобрений": (True, 0.7, "Пограничный случай"),
+        "Доставка удобрений": (True, 0.7, "Граничный случай"),
     }
     monkeypatch.setattr(evaluation, "load_subject_cases", lambda: cases)
     monkeypatch.setattr(
@@ -121,11 +121,11 @@ def test_subject_report_combines_edge_without_adding_it_to_accuracy(
     report = evaluation.subject_report()
     assert "Корректно однозначных примеров: 2/2" in report
     assert (
-        "Пограничных примеров: 1. Они не включаются в расчёт точности."
+        "Граничных примеров: 1. Они не включаются в расчёт точности."
         in report
     )
     assert "| EDGE" in report
     edge_row = next(line for line in report.splitlines() if "Доставка удобрений" in line)
-    assert "Пограничный случай" in edge_row
+    assert "Граничный случай" in edge_row
     assert "—" in edge_row
     assert "| OK" not in edge_row

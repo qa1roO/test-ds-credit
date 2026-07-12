@@ -109,7 +109,7 @@ def test_ambiguous_subject_calls_llm(
     def mocked_result(_subject: str) -> tuple[bool, float, str]:
         nonlocal calls
         calls += 1
-        return True, 0.7, "Пограничный случай"
+        return True, 0.7, "Граничный случай"
 
     monkeypatch.setattr(subject_check, "_llm_subject_result", mocked_result)
     subject_check.check_subject(subject)

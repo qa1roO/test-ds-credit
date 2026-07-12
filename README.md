@@ -10,8 +10,6 @@
 
 ## 1. Как запустить проект
 
-Требуется Python 3.11+.
-
 ```bash
 python -m pip install -e .
 python -m pytest

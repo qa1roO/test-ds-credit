@@ -15,7 +15,7 @@ from llm_client import llm_available
 from subject_check import check_subject
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATASET_DIR = PROJECT_ROOT / "dataset"
+DATASET_DIR = PROJECT_ROOT / "documents"
 
 EXPECTED_EXTRACTION: dict[str, dict[str, object | None]] = {
     "contract_001.txt": {

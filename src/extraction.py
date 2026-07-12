@@ -51,6 +51,19 @@ MONTHS = {
     "декабря": 12,
 }
 
+OCR_DIGIT_TRANSLATION = str.maketrans(
+    {
+        "O": "0",
+        "o": "0",
+        "О": "0",
+        "о": "0",
+        "I": "1",
+        "l": "1",
+        "|": "1",
+    }
+)
+OCR_DIGIT = r"[0-9OОoоIl]"
+
 
 def clean_text(value: object | None) -> str | None:
     """Убирает лишние пробелы и разделители из строкового значения."""
@@ -62,7 +75,8 @@ def clean_text(value: object | None) -> str | None:
 
 def _plain_number(value: str) -> float | None:
     """Преобразовывает строку с разделителями тысяч и дробной частью в число."""
-    number = re.sub(r"[^\d,.]", "", value.replace("\u00a0", " "))
+    normalized = value.translate(OCR_DIGIT_TRANSLATION).replace("\u00a0", " ")
+    number = re.sub(r"[^\d,.]", "", normalized)
     if not number:
         return None
 
@@ -128,7 +142,7 @@ def normalize_date(value: object | None) -> str | None:
     if value is None:
         return None
 
-    text = str(value).lower().replace("ё", "е")
+    text = str(value).translate(OCR_DIGIT_TRANSLATION).lower().replace("ё", "е")
     iso = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", text)
     if iso:
         year, month, day = (int(part) for part in iso.groups())
@@ -152,8 +166,9 @@ def normalize_date(value: object | None) -> str | None:
 
 
 def normalize_inn(value: object | None) -> str | None:
-    """Вернуть ИНН, если значение содержит ровно 10 или 12 цифр."""
-    digits = re.sub(r"\D", "", str(value or ""))
+    """Вернуть ИНН из 10/12 цифр с учётом частых OCR-подмен."""
+    normalized = str(value or "").translate(OCR_DIGIT_TRANSLATION)
+    digits = re.sub(r"\D", "", normalized)
     return digits if len(digits) in (10, 12) else None
 
 
@@ -176,14 +191,62 @@ def llm_extract(text: str) -> dict[str, object | None] | None:
 
 
 MONEY_PATTERN = (
-    r"(?:\d{1,3}(?:[ \u00a0.,]\d{3})+|\d+)"
-    r"(?:[,.]\d{1,2})?\s*(?:руб\.?|рублей|₽|RUB)?"
-    r"(?:\s*\d{1,2}\s*коп\.?)?"
+    rf"(?:{OCR_DIGIT}{{1,3}}(?:[ \u00a0.,]{OCR_DIGIT}{{3}})+|{OCR_DIGIT}+)"
+    rf"(?:[,.]{OCR_DIGIT}{{1,2}})?\s*(?:руб\.?|рублей|₽|RUB)?"
+    rf"(?:\s*{OCR_DIGIT}{{1,2}}\s*коп\.?)?"
 )
 DATE_PATTERN = (
-    r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|"
-    rf"\d{{1,2}}\s+(?:{'|'.join(MONTHS)})\s+\d{{2,4}}\s*(?:г\.?)?"
+    rf"{OCR_DIGIT}{{1,2}}[./-]{OCR_DIGIT}{{1,2}}[./-]{OCR_DIGIT}{{2,4}}|"
+    rf"{OCR_DIGIT}{{1,2}}\s+(?:{'|'.join(MONTHS)})\s+"
+    rf"{OCR_DIGIT}{{2,4}}\s*(?:г\.?)?"
 )
+
+AMOUNT_PATTERNS = (
+    rf"(?:сумма(?:\s+к\s+оплате)?|[cс][yу]мм[aа]|к\s+оплате|"
+    rf"итого\s+(?:к\s+оплате|с\s+ндс|стоимость\s+(?:работ|товаров?|услуг)))"
+    rf"\s*:?[ \t]*({MONEY_PATTERN})",
+    rf"общая\s+стоимость[^\n.:]{{0,100}}?\s+составляет\s*:?[ \t\n]*"
+    rf"({MONEY_PATTERN})",
+    rf"стоимость\s+(?:работ|товаров?|услуг)[^\n.:]{{0,60}}?\s+составляет"
+    rf"\s*:?[ \t\n]*({MONEY_PATTERN})",
+    rf"итого(?!\s+без\s+ндс)\s*:?[ \t]*({MONEY_PATTERN})",
+    rf"всего[^\n]{{0,50}}?\bна\s+сумму\s*:?[ \t]*({MONEY_PATTERN})",
+)
+
+
+def _extract_subject(text: str) -> str | None:
+    """Найти предмет в подписи, первой строке таблицы или типовой формулировке."""
+    labeled = re.search(
+        r"(?im)^\s*(?:предмет(?:\s+оплаты)?|назначение\s+платежа|"
+        r"наименование(?:\s+(?:товара|работы|услуги))?)\s*:\s*(.+)$",
+        text,
+    )
+    if labeled:
+        return clean_text(labeled.group(1))
+
+    table_row = re.search(r"(?m)^\|\s*1\s*\|\s*([^|\n]+?)\s*\|", text)
+    if table_row:
+        return clean_text(table_row.group(1))
+
+    list_intro = re.search(
+        r"(?i)следующ\w*\s+(?:работ\w*|товар\w*|услуг\w*)\s*:", text
+    )
+    if list_intro:
+        first_item = re.search(
+            r"(?m)^\s*1[.)]\s+(.+?)(?=\s+[—–-]\s*|$)",
+            text[list_intro.end() :],
+        )
+        if first_item:
+            return clean_text(first_item.group(1))
+
+    contractual = re.search(
+        r"(?is)\b(?:поставщик|продавец|исполнитель|подрядчик)\s+обязуется\s+"
+        r"(?:передать|поставить|выполнить|оказать)"
+        r"(?:\s+в\s+собственность\s+\S+)?\s+(.+?)"
+        r"(?=\s*\(|,|;|\s+а\s+(?:покупатель|заказчик)\b|\n\s*\n)",
+        text,
+    )
+    return clean_text(contractual.group(1)) if contractual else None
 
 
 def fallback_extract(text: str) -> dict[str, object | None]:
@@ -191,13 +254,17 @@ def fallback_extract(text: str) -> dict[str, object | None]:
     if not text or not text.strip():
         return EMPTY_RESULT.copy()
 
-    amount_match = re.search(
-        rf"(?i)(?:сумма(?:\s+к\s+оплате)?|итого(?:\s+к\s+оплате)?|к\s+оплате)"
-        rf"\s*:?[ \t]*({MONEY_PATTERN})",
-        text,
+    amount_match = next(
+        (
+            match
+            for pattern in AMOUNT_PATTERNS
+            if (match := re.search(pattern, text, re.IGNORECASE))
+        ),
+        None,
     )
     inn_match = re.search(
-        r"(?i)\bИНН(?:/КПП)?\s*:?[ \t]*(\d{10}|\d{12})\b", text
+        rf"(?i)\bИНН(?:/КПП)?\s*:?[ \t]*({OCR_DIGIT}{{10}}|{OCR_DIGIT}{{12}})\b",
+        text,
     )
     date_match = re.search(DATE_PATTERN, text, re.IGNORECASE)
     contractor_match = re.search(
@@ -205,10 +272,7 @@ def fallback_extract(text: str) -> dict[str, object | None]:
         r"((?:ООО|АО|ПАО|ЗАО|ИП)\s+(?:[«\"].+?[»\"]|[^,\n;]+))",
         text,
     )
-    subject_match = re.search(
-        r"(?im)^\s*(?:предмет(?:\s+оплаты)?|назначение платежа)\s*:\s*(.+)$",
-        text,
-    )
+    subject = _extract_subject(text)
 
     return {
         "amount": normalize_amount(amount_match.group(1)) if amount_match else None,
@@ -217,7 +281,7 @@ def fallback_extract(text: str) -> dict[str, object | None]:
         "contractor": clean_text(contractor_match.group(1))
         if contractor_match
         else None,
-        "subject": clean_text(subject_match.group(1)) if subject_match else None,
+        "subject": subject,
     }
 
 

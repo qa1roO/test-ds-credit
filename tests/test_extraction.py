@@ -24,6 +24,47 @@ def test_required_missing_amount_example(offline: None) -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Общая стоимость услуг по договору составляет 420 000 рублей", 420_000.0),
+        ("Итого без НДС: 100 000 руб.\nИтого с НДС: 120 000 руб.", 120_000.0),
+        ("Итого стоимость работ: 75 500,50 руб.", 75_500.5),
+        ("| Наименование | Сумма |\nИтого: 12 300 руб.", 12_300.0),
+    ],
+)
+def test_fallback_recognizes_common_total_labels(
+    offline: None,
+    text: str,
+    expected: float,
+) -> None:
+    assert extraction.extract(text)["amount"] == expected
+
+
+def test_fallback_handles_common_ocr_digit_substitutions(offline: None) -> None:
+    result = extraction.extract(
+        "Cyммa: l 25O OOO pyб\nДата: O1.O3.2O25\nИНН 77O1234567"
+    )
+
+    assert result["amount"] == 1_250_000.0
+    assert result["date"] == "2025-03-01"
+    assert result["inn"] == "7701234567"
+
+
+def test_fallback_extracts_subject_from_first_table_row(offline: None) -> None:
+    text = """| № | Товар / услуга                    | Количество |
+| 1 | Техническое обслуживание оборудования | 1 |"""
+    assert extraction.extract(text)["subject"] == "Техническое обслуживание оборудования"
+
+
+def test_fallback_extracts_subject_from_contract_clause(offline: None) -> None:
+    text = (
+        "Поставщик обязуется передать в собственность Покупателя запасные части "
+        "для трактора, а Покупатель обязуется принять товар."
+    )
+    assert extraction.extract(text)["subject"] == "запасные части для трактора"
+
+
+@pytest.mark.parametrize(
     ("raw", "expected"),
     [
         ("1 250 000,00 руб.", 1_250_000.0),
